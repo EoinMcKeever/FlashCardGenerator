@@ -1,0 +1,98 @@
+from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from .. import models, schemas, auth
+from ..database import get_db
+
+router = APIRouter(prefix="/api/decks/{deck_id}/flashcards", tags=["flashcards"])
+
+def verify_deck_owner(deck_id: int, db: Session, current_user: models.User):
+    deck = db.query(models.Deck).filter(
+        models.Deck.id == deck_id,
+        models.Deck.owner_id == current_user.id
+    ).first()
+    if deck is None:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    return deck
+
+@router.post("/", response_model=schemas.Flashcard, status_code=status.HTTP_201_CREATED)
+def create_flashcard(
+    deck_id: int,
+    flashcard: schemas.FlashcardCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    verify_deck_owner(deck_id, db, current_user)
+    db_flashcard = models.Flashcard(**flashcard.model_dump(), deck_id=deck_id)
+    db.add(db_flashcard)
+    db.commit()
+    db.refresh(db_flashcard)
+    return db_flashcard
+
+@router.get("/", response_model=List[schemas.Flashcard])
+def read_flashcards(
+    deck_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    verify_deck_owner(deck_id, db, current_user)
+    flashcards = db.query(models.Flashcard).filter(models.Flashcard.deck_id == deck_id).all()
+    return flashcards
+
+@router.get("/{flashcard_id}", response_model=schemas.Flashcard)
+def read_flashcard(
+    deck_id: int,
+    flashcard_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    verify_deck_owner(deck_id, db, current_user)
+    flashcard = db.query(models.Flashcard).filter(
+        models.Flashcard.id == flashcard_id,
+        models.Flashcard.deck_id == deck_id
+    ).first()
+    if flashcard is None:
+        raise HTTPException(status_code=404, detail="Flashcard not found")
+    return flashcard
+
+@router.patch("/{flashcard_id}", response_model=schemas.Flashcard)
+def update_flashcard(
+    deck_id: int,
+    flashcard_id: int,
+    flashcard_update: schemas.FlashcardUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    verify_deck_owner(deck_id, db, current_user)
+    flashcard = db.query(models.Flashcard).filter(
+        models.Flashcard.id == flashcard_id,
+        models.Flashcard.deck_id == deck_id
+    ).first()
+    if flashcard is None:
+        raise HTTPException(status_code=404, detail="Flashcard not found")
+
+    update_data = flashcard_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(flashcard, key, value)
+
+    db.commit()
+    db.refresh(flashcard)
+    return flashcard
+
+@router.delete("/{flashcard_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_flashcard(
+    deck_id: int,
+    flashcard_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    verify_deck_owner(deck_id, db, current_user)
+    flashcard = db.query(models.Flashcard).filter(
+        models.Flashcard.id == flashcard_id,
+        models.Flashcard.deck_id == deck_id
+    ).first()
+    if flashcard is None:
+        raise HTTPException(status_code=404, detail="Flashcard not found")
+    db.delete(flashcard)
+    db.commit()
+    return None
