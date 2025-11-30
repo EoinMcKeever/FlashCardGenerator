@@ -62,7 +62,7 @@ def delete_deck(
 @router.post("/{deck_id}/generate", response_model=dict)
 def generate_deck_flashcards(
     deck_id: int,
-    count: int = 10,
+    count: int = 100,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
@@ -87,6 +87,7 @@ def generate_deck_flashcards(
             flashcard = models.Flashcard(
                 question=card_data['question'],
                 answer=card_data['answer'],
+                hint=card_data.get('hint'),
                 deck_id=deck_id
             )
             db.add(flashcard)
@@ -103,3 +104,31 @@ def generate_deck_flashcards(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate flashcards: {str(e)}")
+
+@router.post("/{deck_id}/reset-mastery", status_code=status.HTTP_200_OK)
+def reset_deck_mastery(
+    deck_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    """
+    Reset mastery levels of all flashcards in a deck to 0.
+    """
+    # Verify deck ownership
+    deck = db.query(models.Deck).filter(
+        models.Deck.id == deck_id,
+        models.Deck.owner_id == current_user.id
+    ).first()
+    if deck is None:
+        raise HTTPException(status_code=404, detail="Deck not found")
+
+    # Reset all flashcards
+    db.query(models.Flashcard).filter(
+        models.Flashcard.deck_id == deck_id
+    ).update({
+        "mastery_level": 0
+    })
+
+    db.commit()
+
+    return {"message": "Mastery levels reset successfully"}

@@ -7,8 +7,10 @@ function StudyMode() {
   const navigate = useNavigate();
   const [deck, setDeck] = useState(null);
   const [flashcards, setFlashcards] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [cardQueue, setCardQueue] = useState([]);
+  const [currentCard, setCurrentCard] = useState(null);
   const [showAnswer, setShowAnswer] = useState(false);
+  const [showHint, setShowHint] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,7 +24,9 @@ function StudyMode() {
         flashcardsAPI.getFlashcards(deckId)
       ]);
       setDeck(deckResponse.data);
-      setFlashcards(flashcardsResponse.data.sort((a, b) => a.mastery_level - b.mastery_level));
+      const sortedCards = flashcardsResponse.data.sort((a, b) => a.mastery_level - b.mastery_level);
+      setFlashcards(sortedCards);
+      return sortedCards;
     } catch (err) {
       console.error('Failed to fetch data', err);
     } finally {
@@ -30,43 +34,87 @@ function StudyMode() {
     }
   };
 
+  // Initialize queue when flashcards are loaded
+  useEffect(() => {
+    if (flashcards.length > 0) {
+      const queue = flashcards.map(card => card.id);
+      setCardQueue(queue);
+      setCurrentCard(flashcards.find(c => c.id === queue[0]));
+    }
+  }, [flashcards]);
+
   const handleKnow = async () => {
-    const currentCard = flashcards[currentIndex];
+    if (!currentCard) return;
+
+    const newMasteryLevel = currentCard.mastery_level + 1;
+
     try {
+      // Update DB: increment mastery level
       await flashcardsAPI.updateFlashcard(deckId, currentCard.id, {
-        mastery_level: currentCard.mastery_level + 1,
+        mastery_level: newMasteryLevel,
         times_reviewed: currentCard.times_reviewed + 1
       });
-      moveToNext();
+
+      let newQueue;
+
+      if (newMasteryLevel >= 5) {
+        // Card is mastered - remove from queue
+        newQueue = cardQueue.slice(1);
+      } else {
+        // Card not yet mastered - move to back of queue
+        newQueue = [...cardQueue.slice(1), currentCard.id];
+      }
+
+      if (newQueue.length === 0) {
+        // All cards are mastered! Reset everything
+        await decksAPI.resetMastery(deckId);
+        alert('🎉 All cards mastered! Resetting deck to start fresh.');
+        // Reload and restart
+        await fetchDeckAndFlashcards();
+      } else {
+        // Fetch updated flashcards
+        const response = await flashcardsAPI.getFlashcards(deckId);
+        const updatedFlashcards = response.data;
+        setFlashcards(updatedFlashcards);
+
+        // Move to next card
+        setCardQueue(newQueue);
+        setCurrentCard(updatedFlashcards.find(c => c.id === newQueue[0]));
+      }
+
+      setShowAnswer(false);
+      setShowHint(false);
     } catch (err) {
       console.error('Failed to update flashcard', err);
     }
   };
 
   const handleDontKnow = async () => {
-    const currentCard = flashcards[currentIndex];
+    if (!currentCard) return;
+
     try {
+      // Update DB: decrement mastery level (minimum 0)
       await flashcardsAPI.updateFlashcard(deckId, currentCard.id, {
         mastery_level: Math.max(0, currentCard.mastery_level - 1),
         times_reviewed: currentCard.times_reviewed + 1
       });
-      moveToNext();
+
+      // Always move to end of queue (card needs more practice)
+      const newQueue = [...cardQueue.slice(1), currentCard.id];
+
+      // Fetch updated flashcards
+      const response = await flashcardsAPI.getFlashcards(deckId);
+      const updatedFlashcards = response.data;
+      setFlashcards(updatedFlashcards);
+
+      // Move to next card in queue
+      setCardQueue(newQueue);
+      setCurrentCard(updatedFlashcards.find(c => c.id === newQueue[0]));
+
+      setShowAnswer(false);
+      setShowHint(false);
     } catch (err) {
       console.error('Failed to update flashcard', err);
-    }
-  };
-
-  const moveToNext = () => {
-    setShowAnswer(false);
-    if (currentIndex < flashcards.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-    } else {
-      if (window.confirm('You have completed all flashcards! Would you like to restart?')) {
-        setCurrentIndex(0);
-        fetchDeckAndFlashcards();
-      } else {
-        navigate(`/deck/${deckId}`);
-      }
     }
   };
 
@@ -86,7 +134,9 @@ function StudyMode() {
     );
   }
 
-  const currentCard = flashcards[currentIndex];
+  if (!currentCard) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <div>
@@ -97,11 +147,11 @@ function StudyMode() {
 
       <div className="container">
         <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-          <p>Card {currentIndex + 1} of {flashcards.length}</p>
+          <p>{cardQueue.length} cards remaining (Mastery: {currentCard.mastery_level}/5)</p>
           <div style={{ width: '100%', backgroundColor: '#ddd', height: '10px', borderRadius: '5px', marginTop: '10px' }}>
             <div
               style={{
-                width: `${((currentIndex + 1) / flashcards.length) * 100}%`,
+                width: `${((flashcards.length - cardQueue.length) / flashcards.length) * 100}%`,
                 backgroundColor: '#4CAF50',
                 height: '100%',
                 borderRadius: '5px',
@@ -111,12 +161,31 @@ function StudyMode() {
           </div>
         </div>
 
-        <div className="flashcard" onClick={() => setShowAnswer(!showAnswer)}>
+        <div className="flashcard">
           <h2>{showAnswer ? 'Answer' : 'Question'}</h2>
           <p>{showAnswer ? currentCard.answer : currentCard.question}</p>
-          <p style={{ marginTop: '20px', fontSize: '14px', color: '#666' }}>
-            {showAnswer ? 'Click to show question' : 'Click to reveal answer'}
-          </p>
+
+          {!showAnswer && showHint && currentCard.hint && (
+            <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#fff3cd', borderRadius: '5px', border: '1px solid #ffc107' }}>
+              <strong>Hint:</strong> {currentCard.hint}
+            </div>
+          )}
+
+          {!showAnswer && !showHint && currentCard.hint && (
+            <button
+              onClick={() => setShowHint(true)}
+              style={{ marginTop: '20px', padding: '10px 20px', backgroundColor: '#ffc107', border: 'none', borderRadius: '5px', cursor: 'pointer' }}
+            >
+              Show Hint
+            </button>
+          )}
+
+          <button
+            onClick={() => setShowAnswer(!showAnswer)}
+            style={{ marginTop: '20px', padding: '10px 20px', width: '100%', backgroundColor: '#2196F3', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}
+          >
+            {showAnswer ? 'Show Question' : 'Show Answer'}
+          </button>
         </div>
 
         {showAnswer && (

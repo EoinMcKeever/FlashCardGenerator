@@ -26,30 +26,31 @@ def generate_flashcards(topic: str, count: int = 10):
 
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
-    prompt = f"""Generate {count} flashcard question-answer pairs about: {topic}
+    prompt = f"""Generate {count} flashcards base questions/answers pairs with hints about {topic}
 
 Return ONLY a JSON array with this exact format:
 [
-  {{"question": "Question text here?", "answer": "Answer text here"}},
-  {{"question": "Another question?", "answer": "Another answer"}}
+  {{"question": "Question text here?", "answer": "Answer text here", "hint": "Helpful hint here"}},
+  {{"question": "Another question?", "answer": "Another answer", "hint": "Another hint"}}
 ]
 
 Rules:
 - Questions should be clear and specific
 - Answers should be concise but complete
+- Hints should provide guidance without giving away the full answer
 - Cover different aspects of the topic
 - Make questions progressively more detailed
 - Return ONLY valid JSON, no other text"""
 
     try:
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are a helpful assistant that creates educational flashcards. Always respond with valid JSON only."},
+                {"role": "system", "content": f"You are an expert with 20 years experience on {topic}, create educational flashcards for a student who is new to {topic} that is trying to master {topic}, explain the topic in as much detail as possible. Always respond with valid JSON only."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
-            max_tokens=2000
+            max_tokens=16000
         )
 
         content = response.choices[0].message.content.strip()
@@ -67,7 +68,7 @@ Rules:
             raise ValueError("Response is not a list")
 
         for card in flashcards:
-            if not isinstance(card, dict) or 'question' not in card or 'answer' not in card:
+            if not isinstance(card, dict) or 'question' not in card or 'answer' not in card or 'hint' not in card:
                 raise ValueError("Invalid flashcard format")
 
         return flashcards

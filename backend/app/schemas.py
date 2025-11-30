@@ -27,6 +27,7 @@ class TokenData(BaseModel):
 class FlashcardBase(BaseModel):
     question: str
     answer: str
+    hint: Optional[str] = None
 
 class FlashcardCreate(FlashcardBase):
     pass

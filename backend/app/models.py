@@ -34,6 +34,7 @@ class Flashcard(Base):
     id = Column(Integer, primary_key=True, index=True)
     question = Column(String, nullable=False)
     answer = Column(String, nullable=False)
+    hint = Column(String, nullable=True)
     deck_id = Column(Integer, ForeignKey("decks.id"))
     mastery_level = Column(Integer, default=0)
     times_reviewed = Column(Integer, default=0)

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -38,6 +38,7 @@ export const decksAPI = {
   createDeck: (deckData) => api.post('/api/decks/', deckData),
   deleteDeck: (deckId) => api.delete(`/api/decks/${deckId}`),
   generateFlashcards: (deckId, count = 10) => api.post(`/api/decks/${deckId}/generate?count=${count}`),
+  resetMastery: (deckId) => api.post(`/api/decks/${deckId}/reset-mastery`),
 };
 
 export const flashcardsAPI = {

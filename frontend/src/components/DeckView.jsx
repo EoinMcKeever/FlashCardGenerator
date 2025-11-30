@@ -10,6 +10,7 @@ function DeckView() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
+  const [hint, setHint] = useState('');
   const [error, setError] = useState('');
   const [generating, setGenerating] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -42,9 +43,10 @@ function DeckView() {
     setError('');
 
     try {
-      await flashcardsAPI.createFlashcard(deckId, { question, answer });
+      await flashcardsAPI.createFlashcard(deckId, { question, answer, hint });
       setQuestion('');
       setAnswer('');
+      setHint('');
       setShowCreateForm(false);
       fetchFlashcards();
     } catch (err) {
@@ -64,7 +66,7 @@ function DeckView() {
   };
 
   const handleGenerateFlashcards = async () => {
-    if (!window.confirm('Generate 10 AI-powered flashcards based on the deck topic?')) {
+    if (!window.confirm('Generate 100 AI-powered flashcards with hints based on the deck topic?')) {
       return;
     }
 
@@ -73,7 +75,7 @@ function DeckView() {
     setSuccessMessage('');
 
     try {
-      const response = await decksAPI.generateFlashcards(deckId, 10);
+      const response = await decksAPI.generateFlashcards(deckId, 100);
       setSuccessMessage(response.data.message);
       fetchFlashcards();
       setTimeout(() => setSuccessMessage(''), 5000);
@@ -146,6 +148,15 @@ function DeckView() {
                   required
                 />
               </div>
+              <div className="form-group">
+                <label>Hint (optional)</label>
+                <input
+                  type="text"
+                  value={hint}
+                  onChange={(e) => setHint(e.target.value)}
+                  placeholder="Provide a helpful hint"
+                />
+              </div>
               <button type="submit">Add Flashcard</button>
             </form>
           </div>
@@ -160,6 +171,11 @@ function DeckView() {
               <div key={flashcard.id} style={{ background: 'white', padding: '20px', borderRadius: '8px' }}>
                 <p><strong>Q:</strong> {flashcard.question}</p>
                 <p><strong>A:</strong> {flashcard.answer}</p>
+                {flashcard.hint && (
+                  <p style={{ color: '#666', fontStyle: 'italic' }}>
+                    <strong>Hint:</strong> {flashcard.hint}
+                  </p>
+                )}
                 <p style={{ fontSize: '14px', color: '#666', marginTop: '10px' }}>
                   Mastery Level: {flashcard.mastery_level} | Times Reviewed: {flashcard.times_reviewed}
                 </p>
