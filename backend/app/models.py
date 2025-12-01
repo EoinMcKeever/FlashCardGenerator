@@ -27,6 +27,19 @@ class Deck(Base):
 
     owner = relationship("User", back_populates="decks")
     flashcards = relationship("Flashcard", back_populates="deck", cascade="all, delete-orphan")
+    pdfs = relationship("PDFDocument", back_populates="deck", cascade="all, delete-orphan")
+
+class PDFDocument(Base):
+    __tablename__ = "pdf_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    deck_id = Column(Integer, ForeignKey("decks.id"))
+    filename = Column(String, nullable=False)
+    file_path = Column(String, nullable=False)
+    file_size = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    deck = relationship("Deck", back_populates="pdfs")
 
 class Flashcard(Base):
     __tablename__ = "flashcards"

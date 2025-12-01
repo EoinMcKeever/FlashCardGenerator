@@ -38,6 +38,8 @@ export const decksAPI = {
   createDeck: (deckData) => api.post('/api/decks/', deckData),
   deleteDeck: (deckId) => api.delete(`/api/decks/${deckId}`),
   generateFlashcards: (deckId, count = 10) => api.post(`/api/decks/${deckId}/generate?count=${count}`),
+  generateFlashcardsFromPDFs: (deckId, instructions, count = 100) =>
+    api.post(`/api/decks/${deckId}/generate-from-pdfs`, { instructions, count }),
   resetMastery: (deckId) => api.post(`/api/decks/${deckId}/reset-mastery`),
 };
 
@@ -47,6 +49,22 @@ export const flashcardsAPI = {
   createFlashcard: (deckId, flashcardData) => api.post(`/api/decks/${deckId}/flashcards/`, flashcardData),
   updateFlashcard: (deckId, flashcardId, updateData) => api.patch(`/api/decks/${deckId}/flashcards/${flashcardId}`, updateData),
   deleteFlashcard: (deckId, flashcardId) => api.delete(`/api/decks/${deckId}/flashcards/${flashcardId}`),
+};
+
+export const pdfsAPI = {
+  uploadPDF: (deckId, file, onUploadProgress) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post(`/api/decks/${deckId}/pdfs/`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress,
+    });
+  },
+  getPDFs: (deckId) => api.get(`/api/decks/${deckId}/pdfs/`),
+  deletePDF: (deckId, pdfId) => api.delete(`/api/decks/${deckId}/pdfs/${pdfId}`),
+  getPDFFile: (deckId, pdfId) => `${API_URL}/api/decks/${deckId}/pdfs/${pdfId}/file`,
 };
 
 export default api;

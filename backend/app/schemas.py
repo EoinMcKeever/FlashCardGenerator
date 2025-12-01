@@ -54,11 +54,25 @@ class DeckBase(BaseModel):
 class DeckCreate(DeckBase):
     pass
 
+class PDFDocumentBase(BaseModel):
+    filename: str
+    file_size: int
+
+class PDFDocument(PDFDocumentBase):
+    id: int
+    deck_id: int
+    file_path: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
 class Deck(DeckBase):
     id: int
     owner_id: int
     created_at: datetime
     flashcards: List[Flashcard] = []
+    pdfs: List[PDFDocument] = []
 
     class Config:
         from_attributes = True

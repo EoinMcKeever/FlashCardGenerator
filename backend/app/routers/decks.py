@@ -1,9 +1,10 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlalchemy.orm import Session
 from .. import models, schemas, auth
 from ..database import get_db
-from ..ai_service import generate_flashcards
+from ..ai_service import generate_flashcards, generate_flashcards_from_pdfs
+from ..pdf_service import process_multiple_pdfs
 
 router = APIRouter(prefix="/api/decks", tags=["decks"])
 
@@ -132,3 +133,77 @@ def reset_deck_mastery(
     db.commit()
 
     return {"message": "Mastery levels reset successfully"}
+
+@router.post("/{deck_id}/generate-from-pdfs", response_model=dict)
+def generate_flashcards_from_deck_pdfs(
+    deck_id: int,
+    instructions: str = Body(..., embed=True),
+    count: int = Body(100, embed=True),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    """
+    Generate flashcards from PDFs in a deck using AI based on user instructions.
+    """
+    # Verify deck ownership
+    deck = db.query(models.Deck).filter(
+        models.Deck.id == deck_id,
+        models.Deck.owner_id == current_user.id
+    ).first()
+    if deck is None:
+        raise HTTPException(status_code=404, detail="Deck not found")
+
+    # Get all PDFs for this deck
+    pdfs = db.query(models.PDFDocument).filter(
+        models.PDFDocument.deck_id == deck_id
+    ).all()
+
+    if not pdfs:
+        raise HTTPException(
+            status_code=400,
+            detail="No PDFs found in this deck. Please upload at least one PDF first."
+        )
+
+    try:
+        # Extract PDF paths
+        pdf_paths = [pdf.file_path for pdf in pdfs]
+
+        # Process all PDFs
+        print(f"Processing {len(pdf_paths)} PDFs for deck {deck_id}...")
+        combined_content = process_multiple_pdfs(pdf_paths)
+
+        # Generate flashcards using AI with user instructions
+        print(f"Generating {count} flashcards from PDF content...")
+        flashcards_data = generate_flashcards_from_pdfs(
+            pdf_content=combined_content,
+            user_instructions=instructions,
+            count=count
+        )
+
+        # Create flashcard records in database
+        created_count = 0
+        for card_data in flashcards_data:
+            flashcard = models.Flashcard(
+                question=card_data['question'],
+                answer=card_data['answer'],
+                hint=card_data.get('hint'),
+                deck_id=deck_id
+            )
+            db.add(flashcard)
+            created_count += 1
+
+        db.commit()
+
+        return {
+            "message": f"Successfully generated {created_count} flashcards from {len(pdfs)} PDF(s)",
+            "count": created_count,
+            "pdf_count": len(pdfs)
+        }
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate flashcards from PDFs: {str(e)}"
+        )
